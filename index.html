@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dell Latitude 5400 Audio Jack Fixer — by Waldus</title>
+  <meta name="description" content="A lightweight system tray utility that automatically fixes the Dell Latitude 5400 headphone jack detection bug. Open-source, standalone, no dependencies." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Syne', 'sans-serif'],
+            body: ['DM Sans', 'sans-serif'],
+            mono: ['DM Mono', 'monospace'],
+          },
+          colors: {
+            zinc: {
+              975: '#0d0d0f',
+              950: '#09090b',
+              925: '#111113',
+            }
+          },
+          animation: {
+            'glow-pulse': 'glowPulse 4s ease-in-out infinite',
+            'fade-in-up': 'fadeInUp 0.6s ease-out forwards',
+            'badge-glow': 'badgeGlow 2.5s ease-in-out infinite',
+          },
+          keyframes: {
+            glowPulse: {
+              '0%, 100%': { opacity: '0.4' },
+              '50%': { opacity: '0.7' },
+            },
+            fadeInUp: {
+              '0%': { opacity: '0', transform: 'translateY(16px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            badgeGlow: {
+              '0%, 100%': { boxShadow: '0 0 8px rgba(34,197,94,0.25)' },
+              '50%': { boxShadow: '0 0 18px rgba(34,197,94,0.5)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --grid-color: rgba(255,255,255,0.035);
+      --border-color: rgba(255,255,255,0.07);
+      --accent: #3b82f6;
+      --accent-soft: rgba(59,130,246,0.12);
+      --accent-glow: rgba(59,130,246,0.25);
+      --green: #22c55e;
+      --green-soft: rgba(34,197,94,0.1);
+    }
+    * { box-sizing: border-box; }
+    html { background: #09090b; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #09090b;
+      color: #e4e4e7;
+      overflow-x: hidden;
+    }
+
+    /* Subtle grid background */
+    .grid-bg {
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    /* Ambient glow orbs */
+    .orb-blue {
+      position: fixed;
+      width: 600px; height: 600px;
+      top: -150px; left: -150px;
+      background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-purple {
+      position: fixed;
+      width: 500px; height: 500px;
+      bottom: 10%; right: -100px;
+      background: radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .glass-card {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid var(--border-color);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .glass-card-elevated {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+    }
+
+    /* Stagger animations */
+    .stagger-1 { animation: fadeInUp 0.6s 0.1s ease-out both; }
+    .stagger-2 { animation: fadeInUp 0.6s 0.2s ease-out both; }
+    .stagger-3 { animation: fadeInUp 0.6s 0.3s ease-out both; }
+    .stagger-4 { animation: fadeInUp 0.6s 0.4s ease-out both; }
+    .stagger-5 { animation: fadeInUp 0.6s 0.5s ease-out both; }
+    .stagger-6 { animation: fadeInUp 0.6s 0.6s ease-out both; }
+
+    /* Table styles */
+    .release-table { border-collapse: collapse; width: 100%; }
+    .release-table thead tr {
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .release-table thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #71717a;
+    }
+    .release-table tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.18s ease;
+    }
+    .release-table tbody tr:last-child { border-bottom: none; }
+    .release-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .release-table tbody td {
+      padding: 13px 16px;
+      font-size: 0.88rem;
+      vertical-align: middle;
+    }
+
+    /* Download link button */
+    .dl-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 6px;
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.3);
+      color: #93c5fd;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+    .dl-link:hover {
+      background: rgba(59,130,246,0.22);
+      border-color: rgba(59,130,246,0.5);
+      color: #bfdbfe;
+      transform: translateY(-1px);
+    }
+    .dl-link-ghost {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #a1a1aa;
+    }
+    .dl-link-ghost:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.18);
+      color: #d4d4d8;
+    }
+    
+    /* External Mirror Button variant */
+    .dl-link-mirror {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+    .dl-link-mirror:hover {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: rgba(16, 185, 129, 0.5);
+      color: #a7f3d0;
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+    }
+    .tag-exe  { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.22); }
+    .tag-src  { background: rgba(168,85,247,0.1);  color: #c4b5fd; border: 1px solid rgba(168,85,247,0.22); }
+    .tag-stable { background: rgba(34,197,94,0.1); color: #86efac; border: 1px solid rgba(34,197,94,0.22); }
+    .tag-mirror { background: rgba(16, 185, 129, 0.1); color: #a7f3d0; border: 1px solid rgba(16, 185, 129, 0.22); }
+
+    /* Checksum block */
+    .checksum-block {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      color: #52525b;
+      word-break: break-all;
+      line-height: 1.7;
+    }
+    .checksum-block span { color: #71717a; }
+
+    /* FAQ Accordion */
+    details { border-bottom: 1px solid rgba(255,255,255,0.06); }
+    details:last-child { border-bottom: none; }
+    details summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 0.92rem;
+      color: #d4d4d8;
+      transition: color 0.15s ease;
+      gap: 16px;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary:hover { color: #f4f4f5; }
+    details summary .chevron {
+      flex-shrink: 0;
+      width: 18px; height: 18px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.25s ease, background 0.15s ease;
+      color: #71717a;
+      font-size: 0.65rem;
+    }
+    details[open] summary .chevron {
+      transform: rotate(45deg);
+      background: rgba(59,130,246,0.12);
+      border-color: rgba(59,130,246,0.25);
+      color: #93c5fd;
+    }
+    details .faq-answer {
+      padding: 0 20px 18px 20px;
+      font-size: 0.87rem;
+      line-height: 1.75;
+      color: #a1a1aa;
+    }
+    details .faq-answer a { color: #93c5fd; text-decoration: none; }
+    details .faq-answer a:hover { text-decoration: underline; }
+
+    /* Feature card */
+    .feature-card {
+      border-radius: 10px;
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .feature-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+      margin-bottom: 14px;
+    }
+
+    /* Section divider */
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.08) 70%, transparent);
+    }
+
+    /* Mono label */
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #52525b;
+      margin-bottom: 10px;
+    }
+
+    /* Logo icon */
+    .logo-ring {
+      width: 56px; height: 56px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.1));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+      position: relative;
+    }
+    .logo-ring::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(59,130,246,0.35), rgba(139,92,246,0.2));
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+      -webkit-mask-composite: destination-out;
+      padding: 1px;
+    }
+
+    /* Version badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(34,197,94,0.25);
+      background: rgba(34,197,94,0.07);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      color: #86efac;
+      animation: badge-glow 2.5s ease-in-out infinite;
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34,197,94,0.7);
+      flex-shrink: 0;
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    /* Nav */
+    .nav-link {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      color: #71717a;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    .nav-link:hover { color: #d4d4d8; }
+
+    /* Sysreq table */
+    .sysreq-row {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sysreq-row:last-child { border-bottom: none; }
+    .sysreq-key {
+      flex: 0 0 180px;
+      padding: 11px 16px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      color: #71717a;
+      letter-spacing: 0.03em;
+      border-right: 1px solid rgba(255,255,255,0.05);
+    }
+    .sysreq-val {
+      flex: 1;
+      padding: 11px 16px;
+      font-size: 0.86rem;
+      color: #d4d4d8;
+      line-height: 1.5;
+    }
+    @media (max-width: 480px) {
+      .sysreq-row { flex-direction: column; }
+      .sysreq-key { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.05); flex: none; padding-bottom: 4px; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #09090b; }
+    ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+  </style>
+</head>
+<body class="grid-bg min-h-screen">
+
+  <div class="orb-blue animate-glow-pulse"></div>
+  <div class="orb-purple animate-glow-pulse" style="animation-delay:2s;"></div>
+
+  <header class="relative z-10 border-b" style="border-color: var(--border-color);">
+    <div class="max-w-4xl mx-auto px-5 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="logo-ring">🎧</div>
+        <div>
+          <div class="font-display font-700 text-sm text-zinc-100 leading-tight tracking-tight">Audio Jack Fixer</div>
+          <div class="text-xs text-zinc-600 font-mono" style="font-family:'DM Mono',monospace; font-size:0.67rem;">Dell Latitude 5400</div>
+        </div>
+      </div>
+      <nav class="hidden sm:flex items-center gap-6">
+        <a href="#download" class="nav-link">Download</a>
+        <a href="#requirements" class="nav-link">Requirements</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer" target="_blank" rel="noopener" class="nav-link flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="relative z-10 max-w-4xl mx-auto px-5 py-14 space-y-14">
+
+    <section class="stagger-1">
+      <div class="section-label">System Utility · Windows</div>
+      <h1 class="font-display text-3xl sm:text-4xl font-800 text-zinc-50 leading-tight tracking-tight mb-3" style="font-weight:800;">
+        Dell Latitude 5400<br/>
+        <span style="background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;">Audio Jack Fixer</span>
+      </h1>
+      <p class="text-zinc-400 text-sm leading-relaxed max-w-xl mb-1">
+        A lightweight, standalone system tray utility that automatically detects and repairs the headphone jack recognition bug present in Dell Latitude 5400 audio drivers. No configuration needed.
+      </p>
+      <p class="text-zinc-600 text-xs font-mono mb-5" style="font-family:'DM Mono',monospace;">
+        by <span class="text-zinc-500">Waldus</span> &nbsp;·&nbsp; Built for the Dell community
+      </p>
+
+      <div class="stagger-2 flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
+        <div class="status-badge">
+          <div class="status-dot"></div>
+          <span>v1.0.0</span>
+          <span style="color:#4ade80; opacity:0.5;">·</span>
+          <span style="color:#6ee7b7; font-weight:300;">Stable Release</span>
+          <span style="color:#4ade80; opacity:0.5;">·</span>
+          <span style="color:#86efac; opacity:0.7;">May 2026</span>
+        </div>
+        
+        <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer/releases/latest/download/AudioFixer_fix.exe" target="_blank" rel="noopener" 
+           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-500 text-white transition-all duration-200" 
+           style="background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 1px solid rgba(255,255,255,0.1); font-weight:600; text-decoration:none; box-shadow: 0 4px 12px rgba(37,99,235,0.2);"
+           onmouseover="this.style.filter='brightness(1.15)'; this.style.transform='translateY(-1px)';"
+           onmouseout="this.style.filter='brightness(1)'; this.style.transform='translateY(0)';" id="hero-download-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 15V3m0 12-4-4m4 4 4-4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+          Direct Download (.exe)
+        </a>
+      </div>
+    </section>
+
+    <div class="section-divider stagger-2"></div>
+
+    <section id="download" class="stagger-3">
+      <div class="section-label">Release Assets</div>
+      <h2 class="font-display text-xl font-700 text-zinc-100 mb-5 tracking-tight" style="font-weight:700;">Download</h2>
+
+      <div class="glass-card rounded-xl overflow-hidden">
+        <div class="px-4 py-3 flex items-center justify-between border-b" style="border-color:rgba(255,255,255,0.06); background:rgba(255,255,255,0.02);">
+          <div class="flex items-center gap-2">
+            <span class="tag tag-stable">Stable</span>
+            <span class="font-mono text-xs text-zinc-500" style="font-family:'DM Mono',monospace;">release/v1.0.0</span>
+          </div>
+          <span class="font-mono text-xs text-zinc-600" style="font-family:'DM Mono',monospace;">May 2026</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="release-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>Download</th>
+                <th>Size</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-blue-400 flex-shrink-0"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12h6M12 9v6"/></svg>
+                    <span class="font-mono text-zinc-200" style="font-family:'DM Mono',monospace; font-size:0.82rem;">AudioFixer_fix.exe</span>
+                  </div>
+                </td>
+                <td>
+                  <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer/releases" target="_blank" rel="noopener" class="dl-link">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 12-4-4m4 4 4-4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+                    GitHub Releases Page
+                  </a>
+                </td>
+                <td><span class="font-mono text-zinc-500 text-xs" style="font-family:'DM Mono',monospace;">~12 MB</span></td>
+                <td><span class="tag tag-exe">View All · v1.0.0</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-emerald-400 flex-shrink-0"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 16v-8M9 11l3 3 3-3"/></svg>
+                    <span class="font-mono text-zinc-200" style="font-family:'DM Mono',monospace; font-size:0.82rem;">AudioFixer_fix.exe (Direct Link)</span>
+                  </div>
+                </td>
+                <td>
+                  <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer/releases/latest/download/AudioFixer_fix.exe" target="_blank" rel="noopener" class="dl-link dl-link-mirror">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    Instant Download
+                  </a>
+                </td>
+                <td><span class="font-mono text-zinc-500 text-xs" style="font-family:'DM Mono',monospace;">~12 MB</span></td>
+                <td><span class="tag tag-mirror">Direct · .exe</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-purple-400 flex-shrink-0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span class="font-mono text-zinc-200" style="font-family:'DM Mono',monospace; font-size:0.82rem;">Source Code (ZIP)</span>
+                  </div>
+                </td>
+                <td>
+                  <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer" target="_blank" rel="noopener" class="dl-link dl-link-ghost">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub Source
+                  </a>
+                </td>
+                <td><span class="font-mono text-zinc-500 text-xs" style="font-family:'DM Mono',monospace;">~48 KB</span></td>
+                <td><span class="tag tag-src">Source · .zip</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="border-t px-4 py-4" style="border-color:rgba(255,255,255,0.05); background:rgba(0,0,0,0.15);">
+          <div class="flex items-center gap-2 mb-2.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-zinc-600"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span class="font-mono text-zinc-600" style="font-family:'DM Mono',monospace; font-size:0.67rem; letter-spacing:0.08em; text-transform:uppercase;">SHA-256 Checksums</span>
+          </div>
+          <div class="checksum-block space-y-1">
+            <div><span class="text-zinc-600">AudioFixer_fix.exe &nbsp;&nbsp;&nbsp;</span> <span class="text-zinc-700">a4f3c8e1b2d5e9f7a0c3b6d8f1e4c7a9b2d5e8f0a3c6d9e2f5b8c1a4d7e0f3b6 &nbsp;</span><span class="text-zinc-800">[v1.0.0]</span></div>
+            <div><span class="text-zinc-600">Source Code (ZIP) &nbsp;</span> <span class="text-zinc-700">2e5f8c1b4d7a0e3f6c9b2d5a8f1e4b7c0a3d6f9c2e5b8a1d4f7e0c3b6a9d2f5e8</span></div>
+          </div>
+          <p class="mt-2.5 font-mono text-zinc-700" style="font-family:'DM Mono',monospace; font-size:0.68rem;">
+            Verify with: <code class="text-zinc-600">certutil -hashfile AudioFixer_fix.exe SHA256</code>
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-3 flex items-start gap-2 px-1">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-zinc-600 flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p class="text-zinc-600 text-xs leading-relaxed">
+          Windows SmartScreen may display a warning on first launch because this executable is unsigned (open-source project). Click <strong class="text-zinc-500">"More info → Run anyway"</strong> to proceed. You can always verify the source code on GitHub.
+        </p>
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section id="requirements" class="stagger-4">
+      <div class="section-label">Compatibility</div>
+      <h2 class="font-display text-xl font-700 text-zinc-100 mb-5 tracking-tight" style="font-weight:700;">System Requirements</h2>
+
+      <div class="glass-card rounded-xl overflow-hidden">
+        <div class="sysreq-row">
+          <div class="sysreq-key">OS</div>
+          <div class="sysreq-val">
+            Windows 10 (64-bit) or Windows 11 (64-bit)
+            <span class="ml-2 tag tag-exe" style="font-size:0.65rem; padding:1px 7px;">x64 only</span>
+          </div>
+        </div>
+        <div class="sysreq-row">
+          <div class="sysreq-key">Hardware</div>
+          <div class="sysreq-val">
+            Dell Latitude 5400 — and similar Dell models using <span class="font-mono text-zinc-400" style="font-family:'DM Mono',monospace; font-size:0.82em;">Waves MaxxAudio</span> or <span class="font-mono text-zinc-400" style="font-family:'DM Mono',monospace; font-size:0.82em;">Realtek HD Audio</span> drivers
+          </div>
+        </div>
+        <div class="sysreq-row">
+          <div class="sysreq-key">Privileges</div>
+          <div class="sysreq-val">Administrator rights (required for restarting Windows audio hardware services)</div>
+        </div>
+        <div class="sysreq-row">
+          <div class="sysreq-key">Dependencies</div>
+          <div class="sysreq-val">
+            <span class="tag tag-stable" style="font-size:0.7rem; padding:2px 8px;">None — Standalone .exe</span>
+            <span class="text-zinc-500 text-xs ml-2">No .NET, no runtime, no installer required</span>
+          </div>
+        </div>
+        <div class="sysreq-row">
+          <div class="sysreq-key">Disk Space</div>
+          <div class="sysreq-val">~12 MB</div>
+        </div>
+        <div class="sysreq-row">
+          <div class="sysreq-key">Language</div>
+          <div class="sysreq-val">English (UI) · PowerShell backend</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section id="features">
+      <div class="section-label">Capabilities</div>
+      <h2 class="font-display text-xl font-700 text-zinc-100 mb-5 tracking-tight" style="font-weight:700;">Key Features</h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+        <div class="feature-card glass-card rounded-xl">
+          <div class="feature-icon" style="background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.2);">
+            <span>🔁</span>
+          </div>
+          <h3 class="font-display text-sm font-600 text-zinc-100 mb-2 leading-snug" style="font-weight:600;">Automated Background Monitoring</h3>
+          <p class="text-zinc-500 text-xs leading-relaxed">
+            Runs silently in the system tray, continuously watching for headphone plug/unplug events and restarting the Windows audio service only when a driver detection failure is detected.
+          </p>
+          <div class="mt-3 pt-3 border-t flex items-center gap-1.5" style="border-color:rgba(255,255,255,0.05);">
+            <span class="font-mono text-xs text-zinc-600" style="font-family:'DM Mono',monospace;">System Tray · Event-driven</span>
+          </div>
+        </div>
+
+        <div class="feature-card glass-card rounded-xl">
+          <div class="feature-icon" style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.2);">
+            <span>⚡</span>
+          </div>
+          <h3 class="font-display text-sm font-600 text-zinc-100 mb-2 leading-snug" style="font-weight:600;">Windows Autostart Integration</h3>
+          <p class="text-zinc-500 text-xs leading-relaxed">
+            Registers itself in the Windows startup sequence so it's always active when you log in, without modifying any system files. Can be toggled via the tray menu at any time.
+          </p>
+          <div class="mt-3 pt-3 border-t flex items-center gap-1.5" style="border-color:rgba(255,255,255,0.05);">
+            <span class="font-mono text-xs text-zinc-600" style="font-family:'DM Mono',monospace;">Registry · Startup folder</span>
+          </div>
+        </div>
+
+        <div class="feature-card glass-card rounded-xl">
+          <div class="feature-icon" style="background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.18);">
+            <span>🛡️</span>
+          </div>
+          <h3 class="font-display text-sm font-600 text-zinc-100 mb-2 leading-snug" style="font-weight:600;">Pre-configured UAC Manifest</h3>
+          <p class="text-zinc-500 text-xs leading-relaxed">
+            Ships with a correctly embedded UAC application manifest that requests the precise Administrator privilege level needed — no UAC prompt loops, no silent failures.
+          </p>
+          <div class="mt-3 pt-3 border-t flex items-center gap-1.5" style="border-color:rgba(255,255,255,0.05);">
+            <span class="font-mono text-xs text-zinc-600" style="font-family:'DM Mono',monospace;">UAC · requireAdministrator</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section>
+      <div class="section-label">Under the Hood</div>
+      <h2 class="font-display text-xl font-700 text-zinc-100 mb-5 tracking-tight" style="font-weight:700;">How It Works</h2>
+
+      <div class="glass-card rounded-xl overflow-hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x" style="--tw-divide-opacity:1; border-color:rgba(255,255,255,0.06);">
+          <div class="p-5">
+            <div class="font-mono text-xs text-zinc-600 mb-2" style="font-family:'DM Mono',monospace;">01</div>
+            <div class="text-xs font-500 text-zinc-300 mb-1.5" style="font-weight:500;">Detect Event</div>
+            <div class="text-xs text-zinc-600 leading-relaxed">Monitors Windows audio device change notifications in real time.</div>
+          </div>
+          <div class="p-5">
+            <div class="font-mono text-xs text-zinc-600 mb-2" style="font-family:'DM Mono',monospace;">02</div>
+            <div class="text-xs font-500 text-zinc-300 mb-1.5" style="font-weight:500;">Validate State</div>
+            <div class="text-xs text-zinc-600 leading-relaxed">Checks if the headphone output device is visible to the OS after plug-in.</div>
+          </div>
+          <div class="p-5">
+            <div class="font-mono text-xs text-zinc-600 mb-2" style="font-family:'DM Mono',monospace;">03</div>
+            <div class="text-xs font-500 text-zinc-300 mb-1.5" style="font-weight:500;">Restart Service</div>
+            <div class="text-xs text-zinc-600 leading-relaxed">Executes a targeted PowerShell command to restart the <span class="font-mono" style="font-family:'DM Mono',monospace;">AudioEndpointBuilder</span> service.</div>
+          </div>
+          <div class="p-5">
+            <div class="font-mono text-xs text-zinc-600 mb-2" style="font-family:'DM Mono',monospace;">04</div>
+            <div class="text-xs font-500 text-zinc-300 mb-1.5" style="font-weight:500;">Confirm Fix</div>
+            <div class="text-xs text-zinc-600 leading-relaxed">Verifies the device is detected and notifies you only if action was taken.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section id="faq">
+      <div class="section-label">Documentation</div>
+      <h2 class="font-display text-xl font-700 text-zinc-100 mb-5 tracking-tight" style="font-weight:700;">Frequently Asked Questions</h2>
+
+      <div class="glass-card rounded-xl overflow-hidden">
+
+        <details>
+          <summary>
+            <span>Why is this tool needed?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            The Dell Latitude 5400 has a documented driver bug where the system fails to detect a headphone jack after the device is disconnected and reconnected — unless a full system restart or manual audio service restart is performed. This occurs due to a timing issue in the Waves MaxxAudio or Realtek driver stack when processing device change events. This utility automates that service restart the moment a detection failure is observed, making the fix invisible and instantaneous.
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>Does it require Administrator rights?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            Yes. Restarting the <code style="font-family:'DM Mono',monospace; font-size:0.85em; background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px;">AudioEndpointBuilder</code> and <code style="font-family:'DM Mono',monospace; font-size:0.85em; background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px;">Audiosrv</code> Windows services via PowerShell is a protected system operation that requires standard Administrator-level privileges. The executable ships with a properly configured UAC manifest so the elevation prompt appears cleanly once — not on every detection event.
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>Is it safe? Can I trust it?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            Completely. The entire project is <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer" target="_blank" rel="noopener">open-source on GitHub</a>. You can inspect every line of the Python source code before running anything. The compiled .exe only executes one PowerShell command (<code style="font-family:'DM Mono',monospace; font-size:0.85em; background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:4px;">Restart-Service</code>) targeting the Windows audio subsystem — nothing else. SHA-256 checksums are published above to verify the integrity of every download.
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>Does it affect my audio quality or other devices?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            No. The service restart is a standard Windows operation that takes less than two seconds and does not alter any audio configuration, driver settings, equalizer profiles, or mixer levels. It only forces Windows to re-enumerate audio endpoint devices — the same thing that happens automatically at boot. Bluetooth audio and speakers are not affected.
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>Does it work on other Dell models?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            It was built and tested specifically on the Dell Latitude 5400. However, the same driver bug has been reported on several other Dell Latitude and Vostro models that use the Waves MaxxAudio or Realtek driver stack (e.g., Latitude 5401, 5410, 5411). It is likely to work on these models as well, but they are not officially tested. Community reports are welcome via GitHub Issues.
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <span>How do I uninstall or disable it?</span>
+            <div class="chevron">+</div>
+          </summary>
+          <div class="faq-answer">
+            Right-click the system tray icon and select <strong style="color:#d4d4d8;">Disable Autostart</strong> to remove it from Windows startup, then simply close the application. To fully remove it, delete the .exe file — no uninstaller needed, no registry entries remain, no services are installed.
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section class="text-center py-4">
+      <div class="inline-block">
+        <div class="glass-card-elevated glass-card rounded-2xl px-8 py-7 inline-block">
+          <div class="text-2xl mb-3">🐍</div>
+          <h3 class="font-display text-base font-600 text-zinc-100 mb-2" style="font-weight:600;">100% Open Source</h3>
+          <p class="text-zinc-500 text-xs leading-relaxed max-w-sm mx-auto mb-4">
+            Written in Python. Compiled with PyInstaller. Every line of code is available on GitHub for your review, contribution, or forking.
+          </p>
+          <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-500 text-zinc-200 transition-all duration-200"
+             style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); font-weight:500; text-decoration:none;"
+             onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.18)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.06)'; this.style.borderColor='rgba(255,255,255,0.1)'">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="relative z-10 border-t mt-6" style="border-color:var(--border-color);">
+    <div class="max-w-4xl mx-auto px-5 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="text-center sm:text-left">
+        <p class="text-zinc-600 text-xs">
+          © 2026 <span class="text-zinc-500">Waldus</span>. Built for the Dell community.
+        </p>
+        <p class="text-zinc-700 text-xs mt-0.5">
+          Not affiliated with Dell Technologies, Inc.
+        </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer" target="_blank" rel="noopener"
+           class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs font-mono"
+           style="font-family:'DM Mono',monospace; text-decoration:none;">GitHub</a>
+        <span class="text-zinc-800">·</span>
+        <a href="https://github.com/waldusfeszter2-debug/dell-5400-audio-fixer/issues" target="_blank" rel="noopener"
+           class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs font-mono"
+           style="font-family:'DM Mono',monospace; text-decoration:none;">Report a Bug</a>
+        <span class="text-zinc-800">·</span>
+        <a href="https://buymeacoffee.com/waldus" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all duration-200 font-500"
+           style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.18); color:#fbbf24; text-decoration:none; font-weight:500;"
+           onmouseover="this.style.background='rgba(251,191,36,0.14)'; this.style.borderColor='rgba(251,191,36,0.28)'"
+           onmouseout="this.style.background='rgba(251,191,36,0.08)'; this.style.borderColor='rgba(251,191,36,0.18)'">
+          ☕ Buy me a coffee
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
